@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import joblib
-from sklearn.preprocessing import LabelEncoder
+
 
 # -------------------------------
 # Load Model
@@ -14,23 +14,7 @@ model = joblib.load("co2_model.pkl")
 # -------------------------------
 df = pd.read_csv("co2_emissions.csv")
 
-# -------------------------------
-# Create Label Encoders
-# -------------------------------
-encoders = {}
 
-categorical_columns = [
-    "make",
-    "model",
-    "vehicle_class",
-    "transmission",
-    "fuel_type"
-]
-
-for col in categorical_columns:
-    le = LabelEncoder()
-    le.fit(df[col].astype(str))
-    encoders[col] = le
 
 # -------------------------------
 # Page Configuration
@@ -155,25 +139,45 @@ if st.button("Predict CO₂ Emission"):
 
     try:
 
-        make_encoded = encoders["make"].transform([make])[0]
-        model_encoded = encoders["model"].transform([model_name])[0]
-        vehicle_class_encoded = encoders["vehicle_class"].transform([vehicle_class])[0]
-        transmission_encoded = encoders["transmission"].transform([transmission])[0]
-        fuel_type_encoded = encoders["fuel_type"].transform([fuel_type])[0]
-
+        # Create input dataframe
         input_data = pd.DataFrame({
-            "make": [make_encoded],
-            "model": [model_encoded],
-            "vehicle_class": [vehicle_class_encoded],
+            "make": [make],
+            "model": [model_name],
+            "vehicle_class": [vehicle_class],
             "engine_size": [engine_size],
             "cylinders": [cylinders],
-            "transmission": [transmission_encoded],
-            "fuel_type": [fuel_type_encoded],
+            "transmission": [transmission],
+            "fuel_type": [fuel_type],
             "fuel_consumption_city": [fuel_city],
             "fuel_consumption_hwy": [fuel_hwy],
             "fuel_consumption_comb(l/100km)": [fuel_comb],
             "fuel_consumption_comb(mpg)": [fuel_mpg]
         })
+
+        # Feature Engineering
+        input_data["Fuel_Efficiency"] = 100 / input_data["fuel_consumption_comb(l/100km)"]
+        input_data["Engine_per_Cylinder"] = input_data["engine_size"] / input_data["cylinders"]
+        input_data["Average_Fuel"] = (
+            input_data["fuel_consumption_city"] +
+            input_data["fuel_consumption_hwy"] +
+            input_data["fuel_consumption_comb(l/100km)"]
+        ) / 3
+
+        # One-hot encoding
+        input_data = pd.get_dummies(
+            input_data,
+            columns=[
+                "make",
+                "model",
+                "vehicle_class",
+                "transmission",
+                "fuel_type"
+            ]
+        )
+
+        # Match training columns
+        expected_columns = model.feature_names_in_
+        input_data = input_data.reindex(columns=expected_columns, fill_value=0)
 
         prediction = model.predict(input_data)
 
